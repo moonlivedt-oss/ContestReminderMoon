@@ -1,0 +1,5 @@
+# Python 3.11 (winsdk и mss не имеют колёс под 3.14).
+PyQt6
+mss
+winsdk
+Pillow
