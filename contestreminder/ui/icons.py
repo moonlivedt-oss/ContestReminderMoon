@@ -46,7 +46,7 @@ def bell_icon(size: int = 64, color: str = PALETTE["accent"],
     return QIcon(pm)
 
 
-_ASSETS = Path(__file__).resolve().parent / "assets"
+_ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
 
 def asset_icon(name: str) -> QIcon:

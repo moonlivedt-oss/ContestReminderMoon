@@ -30,7 +30,7 @@ def bundled_dir() -> Path:
     """Где лежит собранный crnative.exe: внутри exe или native/bin в исходниках."""
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", ".")) / "native"
-    return Path(__file__).resolve().parents[1] / "native" / "bin"
+    return Path(__file__).resolve().parents[2] / "native" / "bin"
 
 
 def app_command() -> str:
@@ -39,7 +39,7 @@ def app_command() -> str:
         return f'"{sys.executable}"'
     exe = Path(sys.executable)
     windowed = exe.with_name("pythonw.exe")
-    run = Path(__file__).resolve().parents[1] / "run.pyw"
+    run = Path(__file__).resolve().parents[2] / "run.pyw"
     return f'"{windowed if windowed.exists() else exe}" "{run}"'
 
 

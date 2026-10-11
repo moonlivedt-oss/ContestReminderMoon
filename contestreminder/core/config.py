@@ -31,6 +31,8 @@ DEFAULT_SETTINGS = {
     "digest_days": 3,  # сводка: дедлайны на сколько дней вперёд
     "digest_last": "",  # дата последней сводки (служебное)
     "auto_close_days": 3,  # прошедшие закрывать сами через N дней; 0 - никогда
+    "theme": "auto",  # auto / light / dark / sepia
+    "palette": "mocha",  # палитра: mocha, tokyo, dracula, nord, gruvbox, rosepine, onedark, forest, sunset
     "filter": "active",  # что показано в списке
     "geometry": None,  # base64 QByteArray геометрии окна
 }

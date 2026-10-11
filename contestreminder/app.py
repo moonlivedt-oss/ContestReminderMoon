@@ -15,42 +15,35 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from PyQt6.QtCore import QByteArray, QSize, Qt, QTimer, QUrl
+from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
     QApplication,
-    QButtonGroup,
     QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
     QMenu,
     QMessageBox,
-    QPushButton,
-    QScrollArea,
     QSystemTrayIcon,
-    QVBoxLayout,
-    QWidget,
 )
 
-from . import __version__, autostart, config, enrich, native
-from .bridge import DEFAULT_PORT, Bridge, bookmarklet, new_token
-from .clipboard_watch import ClipboardWatcher
-from .dedupe import find_duplicate
-from .editor import ContestDialog
-from .hotkey import HotkeyManager
-from .i18n import LANGS, lang, set_lang, tr
-from .icons import app_icon, asset_icon
-from .ics import build_ics
-from .models import Contest, fmt_countdown, fmt_deadline, fmt_offset
-from .parser import Parsed, parse
-from .reminders import SNOOZED, ReminderScheduler
-from .settings_dialog import SettingsDialog
-from .theme import build_qss
-from .toast import Action, ToastManager
-
-FILTERS = ("active", "done", "all")
+from . import __version__
+from .core import config
+from .core.dedupe import find_duplicate
+from .core.i18n import lang, set_lang, tr
+from .core.ics import build_ics
+from .core.models import Contest, fmt_countdown, fmt_deadline, fmt_offset
+from .core.parser import Parsed, parse
+from .core.reminders import SNOOZED
+from .services import autostart, enrich, native
+from .services.bridge import DEFAULT_PORT, Bridge, bookmarklet, new_token
+from .services.clipboard_watch import ClipboardWatcher
+from .services.hotkey import HotkeyManager
+from .services.scheduler import ReminderScheduler
+from .ui import theme
+from .ui.editor import ContestDialog
+from .ui.icons import app_icon
+from .ui.main_window import MainWindow
+from .ui.settings_dialog import SettingsDialog
+from .ui.toast import Action, ToastManager
 
 
 def _beep() -> None:
@@ -62,152 +55,14 @@ def _beep() -> None:
         pass
 
 
-def group_of(c: Contest, now: datetime) -> str:
-    """Группа в списке: по близости дедлайна."""
-    if c.done:
-        return tr("Выполненные")
-    dt = c.deadline_dt
-    if dt is None:
-        return tr("Без срока")
-    if dt < now:
-        return tr("Прошли")
-    if dt.date() == now.date():
-        return tr("Сегодня")
-    if dt.date() == (now + timedelta(days=1)).date():
-        return tr("Завтра")
-    if dt < now + timedelta(days=7):
-        return tr("На этой неделе")
-    return tr("Позже")
-
-
-def matches(c: Contest, query: str) -> bool:
-    q = query.strip().lower().replace("ё", "е")
-    if not q:
-        return True
-    hay = " ".join((c.title, c.url, c.source_text)).lower().replace("ё", "е")
-    return all(word in hay for word in q.split())
-
-
-class ContestCard(QFrame):
-    def __init__(self, contest: Contest, app: App) -> None:
-        super().__init__()
-        self.setObjectName("contestCard")
-        self._c = contest
-        self._app = app
-        self.setProperty("expired", contest.is_expired and not contest.done)
-        self.setProperty("done", contest.done)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(
-            lambda pos: app.card_menu(contest, self.mapToGlobal(pos))
-        )
-
-        left = QVBoxLayout(self)
-        left.setContentsMargins(14, 12, 12, 10)
-        left.setSpacing(6)
-
-        title = QLabel()
-        title.setObjectName("cardTitle")
-        title.setWordWrap(True)
-        title.setTextFormat(Qt.TextFormat.PlainText)
-        title.setText(contest.title)
-        if contest.done:
-            title.setProperty("done", True)
-        if contest.url:
-            title.setCursor(Qt.CursorShape.PointingHandCursor)
-            title.setToolTip(tr("Открыть: {url}", url=contest.url))
-            title.mousePressEvent = lambda e: (
-                app.open_url(contest) if e.button() == Qt.MouseButton.LeftButton else None
-            )
-        left.addWidget(title)
-
-        meta = QHBoxLayout()
-        meta.setSpacing(8)
-        left.addLayout(meta)
-        dt = contest.deadline_dt
-        chip_text = tr("готово") if contest.done else fmt_countdown(dt)
-        if contest.done and contest.auto_closed:
-            chip_text = tr("закрыт сам после срока")
-        chip = QLabel(chip_text)
-        chip.setObjectName(self._chip_style(contest))
-        meta.addWidget(chip)
-        if dt:
-            when = QLabel(fmt_deadline(dt))
-            when.setObjectName("muted")
-            meta.addWidget(when)
-        if contest.snoozed_dt and not contest.done:
-            snz = QLabel(tr("отложено до {t}", t=contest.snoozed_dt.strftime("%d.%m %H:%M")))
-            snz.setObjectName("muted")
-            meta.addWidget(snz)
-        meta.addStretch(1)
-
-        if contest.reminders and not contest.done and dt:
-            rem = QLabel(
-                tr("напоминания: {list}", list=", ".join(fmt_offset(m) for m in contest.reminders))
-            )
-            rem.setObjectName("muted")
-            left.addWidget(rem)
-
-        bottom = QHBoxLayout()
-        bottom.setSpacing(4)
-        left.addLayout(bottom)
-        if contest.url:
-            link = QLabel(
-                f'<a style="color:#cba6f7;text-decoration:none" '
-                f'href="{contest.url}">{self._short_url(contest.url)}</a>'
-            )
-            link.setObjectName("link")
-            link.setToolTip(contest.url)
-            link.setOpenExternalLinks(True)
-            link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-            bottom.addWidget(link)
-        bottom.addStretch(1)
-
-        def action(text: str, icon: str, name: str, slot) -> None:
-            btn = QPushButton(text)
-            btn.setObjectName(name)
-            btn.setIcon(asset_icon(icon))
-            btn.setIconSize(QSize(16, 16))
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(slot)
-            bottom.addWidget(btn)
-
-        action(
-            tr("Вернуть") if contest.done else tr("Готово"),
-            "done",
-            "ghost",
-            lambda: app.toggle_done(contest),
-        )
-        action(tr("Изменить"), "edit", "ghost", lambda: app.edit_contest(contest))
-        action(tr("Удалить"), "delete", "dangerGhost", lambda: app.delete_contest(contest))
-
-    @staticmethod
-    def _chip_style(c: Contest) -> str:
-        if c.done:
-            return "chipOk"
-        dt = c.deadline_dt
-        if dt is None:
-            return "chip"
-        secs = (dt - datetime.now()).total_seconds()
-        if secs < 0:
-            return "chipErr"
-        if secs < 86400:
-            return "chipWarn"
-        return "chip"
-
-    @staticmethod
-    def _short_url(url: str) -> str:
-        u = url.replace("https://", "").replace("http://", "").removeprefix("www.")
-        return u[:48] + ("…" if len(u) > 48 else "")
-
-
 class App:
     def __init__(self) -> None:
         self.qapp = QApplication.instance() or QApplication(sys.argv)
         self.qapp.setQuitOnLastWindowClosed(False)
-        self.qapp.setStyleSheet(build_qss())
 
         self.settings = config.load_settings()
         set_lang(self.settings.get("lang", "auto"))
+        theme.apply(self.qapp, self.settings.get("theme", "auto"), self.settings.get("palette", "mocha"))
         if not self.settings.get("bridge_token"):
             self.settings["bridge_token"] = new_token()
             config.save_settings(self.settings)
@@ -216,7 +71,7 @@ class App:
         self._jobs: list = []  # держим ссылки на фоновые загрузки страниц
         self._recent: dict[str, datetime] = {}  # недавно предложенные тексты
 
-        self._build_window()
+        self.win = MainWindow(self)
         self._build_tray()
 
         self.clipboard = ClipboardWatcher()
@@ -266,128 +121,6 @@ class App:
             self.show_window()
 
     # --- построение UI --------------------------------------------------
-    def _build_window(self) -> None:
-        self.win = QWidget()
-        self.win.setObjectName("root")
-        self.win.setWindowTitle(tr("ContestReminder - напоминалка о конкурсах"))
-        self.win.setWindowIcon(app_icon())
-        self.win.resize(600, 680)
-        geo = self.settings.get("geometry")
-        if geo:
-            try:
-                self.win.restoreGeometry(QByteArray(base64.b64decode(geo)))
-            except (ValueError, TypeError):
-                pass
-        self.win.closeEvent = self._on_close
-
-        root = QVBoxLayout(self.win)
-        root.setContentsMargins(16, 14, 16, 12)
-        root.setSpacing(10)
-
-        header = QHBoxLayout()
-        h = QLabel(tr("Конкурсы"))
-        h.setObjectName("h1")
-        header.addWidget(h)
-        self.count_lbl = QLabel("")
-        self.count_lbl.setObjectName("muted")
-        header.addWidget(self.count_lbl)
-        header.addStretch(1)
-
-        ocr_btn = QPushButton(tr("С экрана"))
-        ocr_btn.setObjectName("ghost")
-        ocr_btn.setIcon(asset_icon("ocr"))
-        ocr_btn.setToolTip(
-            tr(
-                "Выделить область экрана с постом и распознать текст ({key})",
-                key=self.settings.get("hotkey", "").upper(),
-            )
-        )
-        ocr_btn.clicked.connect(self.ocr_capture)
-        header.addWidget(ocr_btn)
-
-        add_btn = QPushButton(tr("Добавить"))
-        add_btn.setObjectName("accent")
-        add_btn.setIcon(asset_icon("add"))
-        add_btn.clicked.connect(self.add_manual)
-        header.addWidget(add_btn)
-
-        more = QPushButton("…")
-        more.setObjectName("ghost")
-        more.setToolTip(tr("Ещё"))
-        more.setMenu(self._more_menu())
-        header.addWidget(more)
-        root.addLayout(header)
-
-        tools = QHBoxLayout()
-        tools.setSpacing(6)
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(tr("Поиск по названию, ссылке и тексту"))
-        self.search.setClearButtonEnabled(True)
-        self.search.textChanged.connect(lambda _t: self.refresh())
-        tools.addWidget(self.search, 1)
-        self.filter_group = QButtonGroup(self.win)
-        self.filter_btns: dict[str, QPushButton] = {}
-        for key, label in zip(FILTERS, (tr("Активные"), tr("Выполненные"), tr("Все")), strict=True):
-            b = QPushButton(label)
-            b.setObjectName("seg")
-            b.setCheckable(True)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.clicked.connect(lambda _c=False, k=key: self._set_filter(k))
-            self.filter_group.addButton(b)
-            self.filter_btns[key] = b
-            tools.addWidget(b)
-        cur = self.settings.get("filter", "active")
-        self.filter_btns.get(cur, self.filter_btns["active"]).setChecked(True)
-        root.addLayout(tools)
-
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.list_host = QWidget()
-        self.list_lay = QVBoxLayout(self.list_host)
-        self.list_lay.setContentsMargins(0, 0, 4, 0)
-        self.list_lay.setSpacing(8)
-        self.list_lay.addStretch(1)
-        self.scroll.setWidget(self.list_host)
-        root.addWidget(self.scroll, 1)
-
-        self.hint = QLabel()
-        self.hint.setObjectName("muted")
-        self.hint.setWordWrap(True)
-        root.addWidget(self.hint)
-        self._update_hint()
-
-    def _update_hint(self) -> None:
-        parts = []
-        if self.settings.get("clipboard_watch", True):
-            parts.append(tr("Скопируйте пост о конкурсе - программа сама предложит сохранить."))
-        key = self.settings.get("hotkey", "")
-        if key:
-            parts.append(tr("{key} - распознать пост с экрана.", key=key.upper()))
-        parts.append(tr("Правый клик по карточке - все действия."))
-        self.hint.setText(" ".join(parts))
-
-    def _more_menu(self) -> QMenu:
-        m = QMenu(self.win)
-        m.addAction(tr("Вставить из буфера"), self.paste_clipboard)
-        m.addSeparator()
-        m.addAction(tr("Экспорт всех в календарь (.ics)"), self.export_ics_all)
-        m.addAction(tr("Сохранить резервную копию…"), self.backup_save)
-        m.addAction(tr("Восстановить из копии…"), self.backup_load)
-        m.addSeparator()
-        m.addAction(tr("Браузер: скопировать закладку"), self.copy_bookmarklet)
-        m.addAction(tr("Браузер: сохранить userscript…"), self.save_userscript)
-        m.addSeparator()
-        lang_menu = m.addMenu(tr("Язык"))
-        for code, label in LANGS:
-            act = lang_menu.addAction(tr(label) if code == "auto" else label)
-            act.setCheckable(True)
-            act.setChecked(self.settings.get("lang", "auto") == code)
-            act.triggered.connect(lambda _c=False, c=code: self.set_language(c))
-        m.addAction(tr("Настройки…"), self.open_settings)
-        m.addAction(tr("О программе"), self.about)
-        return m
-
     def _build_tray(self) -> None:
         self.tray = QSystemTrayIcon(app_icon())
         self.tray.setToolTip("ContestReminder")
@@ -437,69 +170,14 @@ class App:
         self.tray.setToolTip(tip)
 
     # --- список ---------------------------------------------------------
-    def _set_filter(self, key: str) -> None:
+    def refresh(self) -> None:
+        self.win.refresh()
+        self._fill_tray_menu()
+
+    def set_filter(self, key: str) -> None:
         self.settings["filter"] = key
         config.save_settings(self.settings)
         self.refresh()
-
-    @staticmethod
-    def _sort_key(c: Contest):
-        dt = c.deadline_dt
-        ts = dt.timestamp() if dt else 9_999_999_999.0
-        # выполненные - свежие сверху; активные - ближайший срок сверху
-        return (c.done, -ts if c.done else ts)
-
-    def refresh(self) -> None:
-        while self.list_lay.count() > 1:
-            item = self.list_lay.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-
-        now = datetime.now()
-        flt = self.settings.get("filter", "active")
-        query = self.search.text()
-        shown = [
-            c
-            for c in self.contests
-            if (flt == "all" or (flt == "done") == c.done) and matches(c, query)
-        ]
-        shown.sort(key=self._sort_key)
-
-        active = sum(1 for c in self.contests if not c.done)
-        done = len(self.contests) - active
-        self.filter_btns["active"].setText(tr("Активные") + f" {active}")
-        self.filter_btns["done"].setText(tr("Выполненные") + f" {done}")
-        soon = sum(
-            1
-            for c in self.contests
-            if not c.done and c.deadline_dt and now <= c.deadline_dt <= now + timedelta(days=3)
-        )
-        self.count_lbl.setText(tr("{n} скоро", n=soon) if soon else "")
-
-        if not shown:
-            if query:
-                text = tr("Ничего не нашлось по запросу «{q}».", q=query)
-            elif flt == "done":
-                text = tr("Выполненных пока нет.")
-            else:
-                text = tr("Пока пусто. Скопируйте пост о конкурсе или добавьте вручную.")
-            empty = QLabel(text)
-            empty.setObjectName("empty")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setWordWrap(True)
-            self.list_lay.insertWidget(0, empty)
-        else:
-            last_group = None
-            for c in shown:
-                g = group_of(c, now)
-                if g != last_group and flt != "done":
-                    lbl = QLabel(g)
-                    lbl.setObjectName("groupHead")
-                    self.list_lay.insertWidget(self.list_lay.count() - 1, lbl)
-                    last_group = g
-                self.list_lay.insertWidget(self.list_lay.count() - 1, ContestCard(c, self))
-        self._fill_tray_menu()
 
     def card_menu(self, c: Contest, pos) -> None:
         m = QMenu(self.win)
@@ -799,7 +477,7 @@ class App:
         self._jobs.append(enrich.start(c.url, done))
 
     def ocr_capture(self) -> None:
-        from .region import RegionSelector
+        from .ui.region import RegionSelector
 
         self._region = RegionSelector()
         self._region.selected.connect(self._on_region)
@@ -809,7 +487,7 @@ class App:
     def _on_region(self, left: int, top: int, w: int, h: int) -> None:
         self._region = None
         try:
-            from .ocr import ocr_region
+            from .services.ocr import ocr_region
 
             text = ocr_region(left, top, w, h, self.settings.get("ocr_lang", "ru"))
         except Exception as e:  # noqa: BLE001 - OCR-движок/язык может отсутствовать
@@ -839,10 +517,15 @@ class App:
                 + fmt_deadline(contest.deadline_dt)
             )
         if self.settings.get("sound", True) and self._notify_style() != "windows":
-            _beep()   # у уведомления Windows свой звук
+            _beep()  # у уведомления Windows свой звук
         style = self._notify_style()
         if style == "windows" and native.toast(
-            self.native, contest.id, head, body, contest.url, lang(),
+            self.native,
+            contest.id,
+            head,
+            body,
+            contest.url,
+            lang(),
             urgent=offset in (0, SNOOZED) or expired,
         ):
             return
@@ -1006,10 +689,18 @@ class App:
                 QMessageBox.warning(
                     self.win, tr("Автозапуск"), tr("Не удалось изменить автозапуск:\n{e}", e=e)
                 )
+        theme_changed = (dlg.theme, dlg.palette) != (
+            self.settings.get("theme", "auto"), self.settings.get("palette", "mocha"))
+        if theme_changed:
+            self.settings["theme"], self.settings["palette"] = dlg.theme, dlg.palette
+            config.save_settings(self.settings)
+            theme.apply(self.qapp, dlg.theme, dlg.palette)
         if dlg.lang != self.settings.get("lang", "auto"):
-            self.set_language(dlg.lang)
+            self.set_language(dlg.lang)          # пересоберёт окно и с новой темой
+        elif theme_changed:
+            self._rebuild_window()
         else:
-            self._update_hint()
+            self.win.update_hint()
             self.refresh()
 
     def set_language(self, code: str) -> None:
@@ -1017,12 +708,28 @@ class App:
         self.settings["lang"] = code
         config.save_settings(self.settings)
         set_lang(code)
+        self._rebuild_window()
+
+    def set_theme(self, mode: str | None = None, palette: str | None = None) -> None:
+        """Режим (авто/светлая/тёмная/сепия) и палитра - сразу, без перезапуска."""
+        if mode:
+            self.settings["theme"] = mode
+        if palette:
+            self.settings["palette"] = palette
+        config.save_settings(self.settings)
+        theme.apply(self.qapp, self.settings.get("theme", "auto"), self.settings.get("palette", "mocha"))
+        self._rebuild_window()
+
+    def _rebuild_window(self) -> None:
         geo = self.win.saveGeometry()
         visible = self.win.isVisible()
-        self.win.hide()
-        self.win.deleteLater()
-        self._build_window()
+        query = self.win.search.text()
+        old = self.win
+        self.win = MainWindow(self)
         self.win.restoreGeometry(geo)
+        self.win.search.setText(query)
+        old.hide()
+        old.deleteLater()
         self.refresh()
         if visible:
             self.show_window()
@@ -1053,7 +760,7 @@ class App:
         self.settings["clipboard_watch"] = on
         config.save_settings(self.settings)
         self.clipboard.set_enabled(on)
-        self._update_hint()
+        self.win.update_hint()
 
     # --- окно и выход ---------------------------------------------------
     def _on_tray_activated(self, reason) -> None:
@@ -1069,7 +776,10 @@ class App:
         self.win.raise_()
         self.win.activateWindow()
 
-    def _on_close(self, event) -> None:
+    def on_window_close(self, event) -> None:
+        if getattr(self, "_quitting", False):
+            event.accept()
+            return
         self.settings["geometry"] = base64.b64encode(bytes(self.win.saveGeometry())).decode("ascii")
         config.save_settings(self.settings)
         event.ignore()
@@ -1089,6 +799,9 @@ class App:
             )
 
     def quit(self) -> None:
+        # Qt 6 перед выходом просит закрыться все окна, а наше на закрытие прячется в
+        # трей - флаг говорит ему «на этот раз выходим», иначе выход отменится
+        self._quitting = True
         if self.hotkey is not None:
             self.hotkey.stop()
         self.bridge.stop()
@@ -1097,9 +810,10 @@ class App:
         config.save_settings(self.settings)
         self.tray.hide()
         if self._lite():
-            self.app_mutex.release()           # сторож видит, что программа закрылась
+            self.app_mutex.release()  # сторож видит, что программа закрылась
             native.start_watcher(self.native)
-        self.qapp.quit()
+        self.win.hide()
+        self.qapp.exit(0)
 
     # --- нативная часть -------------------------------------------------
     def _lite(self) -> bool:
@@ -1162,13 +876,36 @@ def userscript_template() -> Path:
     return base / "browser" / "contestreminder.user.js"
 
 
+def _install_excepthook() -> None:
+    """Ошибка в обработчике Qt не должна закрывать программу (PyQt6 по умолчанию её
+    роняет). Пишем в %APPDATA%\\ContestReminder\\errors.log и работаем дальше."""
+    import traceback
+
+    def hook(exc_type, exc, tb) -> None:
+        try:
+            config.APP_DIR.mkdir(parents=True, exist_ok=True)
+            log = config.APP_DIR / "errors.log"
+            if log.exists() and log.stat().st_size > 512_000:
+                log.unlink()
+            with log.open("a", encoding="utf-8") as f:
+                f.write(f"--- {datetime.now():%Y-%m-%d %H:%M:%S} ContestReminder {__version__}\n")
+                f.write("".join(traceback.format_exception(exc_type, exc, tb)))
+        except OSError:
+            pass
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = hook
+
+
 def main() -> int:
     from .selftest import FLAG
     from .selftest import run as selftest
+
     if FLAG in sys.argv:
         return selftest(sys.argv)
+    _install_excepthook()
     _qapp = QApplication.instance() or QApplication(sys.argv)  # нужен до сокета одной копии
-    from .single_instance import InstanceServer, notify_running
+    from .services.single_instance import InstanceServer, notify_running
 
     if notify_running():
         return 0

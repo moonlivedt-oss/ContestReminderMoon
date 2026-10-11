@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-from .i18n import tr
+from ..core.i18n import tr
 
 DEFAULT_PORT = 47615
 MAX_BODY = 64 * 1024

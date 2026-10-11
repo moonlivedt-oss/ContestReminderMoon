@@ -10,14 +10,14 @@ from pathlib import Path
 import pytest
 from PyQt6.QtCore import QCoreApplication
 
-from contestreminder import config, i18n, ics
-from contestreminder.bridge import Bridge, bookmarklet
-from contestreminder.dedupe import find_duplicate, norm_url
-from contestreminder.enrich import PageInfo, merge, page_info
-from contestreminder.locales import TRANSLATIONS
-from contestreminder.models import Contest
-from contestreminder.parser import parse
-from contestreminder.reminders import SNOOZED, digest, digest_due, due_reminders, to_close
+from contestreminder.core import config, i18n, ics
+from contestreminder.core.dedupe import find_duplicate, norm_url
+from contestreminder.core.locales import TRANSLATIONS
+from contestreminder.core.models import Contest
+from contestreminder.core.parser import parse
+from contestreminder.core.reminders import SNOOZED, digest, digest_due, due_reminders, to_close
+from contestreminder.services.bridge import Bridge, bookmarklet
+from contestreminder.services.enrich import PageInfo, merge, page_info
 
 app = QCoreApplication.instance() or QCoreApplication([])
 NOW = datetime(2026, 10, 11, 12, 0)  # воскресенье
@@ -211,7 +211,7 @@ def test_bookmarklet_contains_token():
 # --- переводы ---------------------------------------------------------------
 def _tr_keys() -> set[str]:
     keys = set()
-    for f in Path(__file__).resolve().parents[1].joinpath("contestreminder").glob("*.py"):
+    for f in Path(__file__).resolve().parents[1].joinpath("contestreminder").rglob("*.py"):
         for node in ast.walk(ast.parse(f.read_text("utf-8"))):
             if (
                 isinstance(node, ast.Call)
@@ -285,6 +285,34 @@ def test_bridge_action_from_windows_notification(port=47698):
 
 
 def test_native_paths_and_command():
-    from contestreminder import native
+    from contestreminder.services import native
     assert native.app_command().endswith('run.pyw"')
     assert native.watcher_command(Path("C:/x/crnative.exe")).endswith('" watch')
+
+
+# --- оформление ---------------------------------------------------------------
+@pytest.mark.parametrize("mode", ["light", "dark", "sepia"])
+def test_every_palette_builds_readable_theme(mode):
+    from contestreminder.ui import theme
+    for key in theme.PALETTES:
+        p = theme.make(mode, key)
+        assert theme.contrast(p["text"], p["surface"]) >= 4.5, (mode, key)
+        if mode != "dark":
+            assert theme.contrast(p["accent"], p["surface"]) >= 4.5, (mode, key)
+        assert "QFrame#contestCard" in theme.build_qss(p)
+
+
+def test_palette_images_exist():
+    from contestreminder.ui import theme
+    root = Path(__file__).resolve().parents[1] / "contestreminder" / "assets" / "palettes"
+    assert all((root / f"{k}.jpg").exists() for k in theme.PALETTES)
+
+
+def test_card_urgency_and_time_share():
+    from contestreminder.ui.card import elapsed_share, urgency_of
+    c = Contest(title="t", created=(NOW - timedelta(days=3)).isoformat(),
+                deadline=(NOW + timedelta(days=1)).isoformat())
+    assert urgency_of(c, NOW) == "soon"
+    assert abs(elapsed_share(c, NOW) - 0.75) < 0.01
+    assert urgency_of(Contest(title="x"), NOW) == "none"
+    assert urgency_of(Contest(title="x", deadline=(NOW - timedelta(hours=1)).isoformat()), NOW) == "overdue"

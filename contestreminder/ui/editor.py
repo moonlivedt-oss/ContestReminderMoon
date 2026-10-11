@@ -23,10 +23,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from . import enrich
-from .i18n import tr
-from .models import Contest
-from .parser import Parsed
+from ..core.i18n import tr
+from ..core.models import Contest
+from ..core.parser import Parsed
+from ..services import enrich
 
 # Наборы напоминаний, доступные галочками (минуты до дедлайна).
 REMINDER_CHOICES = [

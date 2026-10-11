@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 
 from PyQt6.QtCore import QCoreApplication
 
-from contestreminder.models import Contest
-from contestreminder.reminders import ReminderScheduler
+from contestreminder.core.models import Contest
+from contestreminder.services.scheduler import ReminderScheduler
 
 app = QCoreApplication.instance() or QCoreApplication([])
 

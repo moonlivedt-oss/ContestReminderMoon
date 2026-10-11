@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from PyQt6 import sip
 from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QSize, Qt, QTimer
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
@@ -109,7 +110,13 @@ class Toast(QWidget):
         self._timer.timeout.connect(self.dismiss)
 
     # --- содержимое -------------------------------------------------------
+    def alive(self) -> bool:
+        """Карточку могли закрыть, пока шла фоновая работа (страница по ссылке)."""
+        return not self._closing and not sip.isdeleted(self)
+
     def set_text(self, title: str | None = None, body: str | None = None) -> None:
+        if not self.alive():
+            return
         if title is not None:
             self.lbl_title.setText(title)
         if body is not None:

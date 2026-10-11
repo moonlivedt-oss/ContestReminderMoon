@@ -39,9 +39,9 @@ def _checks() -> list[tuple[str, object]]:
             assert sct.monitors
 
     def assets() -> None:
-        from .icons import _ASSETS
+        from .ui.icons import _ASSETS
 
-        for name in ("bell", "add", "check", "arrow-down"):
+        for name in ("bell", "add", "check-dark", "check-light", "arrow-dark", "arrow-light", "mascot-empty"):
             assert (_ASSETS / f"{name}.png").exists(), name
         assert (_ASSETS / "app.ico").exists()
 
@@ -54,16 +54,22 @@ def _checks() -> list[tuple[str, object]]:
         from PyQt6.QtGui import QIcon
         from PyQt6.QtWidgets import QApplication
 
-        from .icons import app_icon
-        from .theme import build_qss
+        from .ui.icons import app_icon
+        from .ui.theme import build_qss
 
         qapp = QApplication.instance() or QApplication(["selftest"])
         qapp.setStyleSheet(build_qss())
         assert not app_icon().isNull()
+        from PyQt6.QtGui import QPixmap
+
+        from .ui.icons import _ASSETS as assets_dir
+        from .ui.theme import PALETTES
+        for key in PALETTES:   # пейзажи палитр - JPEG: нужен плагин Qt imageformats
+            assert not QPixmap(str(assets_dir / "palettes" / f"{key}.jpg")).isNull(), key
         assert isinstance(QIcon(), QIcon)
 
     def parser() -> None:
-        from .parser import parse
+        from .core.parser import parse
 
         p = parse("Конкурс до 15 ноября 2030 в 18:00 https://example.com")
         assert p.deadline and p.deadline.hour == 18 and p.url
@@ -72,7 +78,7 @@ def _checks() -> list[tuple[str, object]]:
         import subprocess
         import tempfile
 
-        from .native import bundled_dir
+        from .services.native import bundled_dir
         exe = bundled_dir() / "crnative.exe"
         if not exe.exists():
             # в exe из релиза C++-часть обязательна; из исходников без MSVC - нет
@@ -84,7 +90,7 @@ def _checks() -> list[tuple[str, object]]:
             assert code == 0, report.read_text("utf-8") if report.exists() else f"код {code}"
 
     def translations() -> None:
-        from .i18n import set_lang, tr
+        from .core.i18n import set_lang, tr
 
         assert set_lang("de") == "de" and tr("Сохранить") == "Speichern"
         set_lang("ru")

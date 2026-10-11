@@ -1,8 +1,8 @@
 """Модель конкурса, форматтеры и автозапуск."""
 from datetime import datetime, timedelta
 
-from contestreminder import autostart
-from contestreminder.models import Contest, fmt_countdown, fmt_offset
+from contestreminder.core.models import Contest, fmt_countdown, fmt_offset
+from contestreminder.services import autostart
 
 
 def test_roundtrip_dict():

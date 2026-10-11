@@ -11,7 +11,7 @@ from pathlib import Path
 
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _VALUE = "ContestReminder"
-_ENTRY = Path(__file__).resolve().parents[1] / "run.pyw"
+_ENTRY = Path(__file__).resolve().parents[2] / "run.pyw"
 TRAY_FLAG = "--tray"
 
 

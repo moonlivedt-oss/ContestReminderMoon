@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QTime
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -15,15 +16,18 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QTimeEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from . import autostart
+from ..core.i18n import LANGS, tr
+from ..services import autostart
+from ..services.hotkey import parse_spec
+from . import theme
 from .editor import REMINDER_CHOICES
-from .hotkey import parse_spec
-from .i18n import LANGS, tr
+from .theme_picker import ThemePicker
 
 CAPTURE_MODES = [
     ("ask", "Спрашивать карточкой в углу"),
@@ -58,8 +62,9 @@ class SettingsDialog(QDialog):
     def __init__(self, parent, settings: dict, native_ok: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Настройки"))
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(560)
         self._s = settings
+        self._theme0 = (settings.get("theme", "auto"), settings.get("palette", "mocha"))
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 16, 18, 16)
@@ -68,11 +73,22 @@ class SettingsDialog(QDialog):
         h.setObjectName("h1")
         root.addWidget(h)
 
-        # --- захват ---
-        form = QFormLayout()
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        root.addWidget(tabs, 1)
+
+        def page() -> tuple[QWidget, QFormLayout]:
+            w = QWidget()
+            f = QFormLayout(w)
+            f.setContentsMargins(4, 12, 4, 4)
+            f.setHorizontalSpacing(12)
+            f.setVerticalSpacing(8)
+            return w, f
+
+        # --- вкладка «Основные»: захват и напоминания ---
+        main_page, form = page()
+        tabs.addTab(main_page, tr("Основные"))
         form.addRow(_section(tr("Автозапись")))
-        form.setHorizontalSpacing(12)
-        form.setVerticalSpacing(8)
         self.chk_clip = QCheckBox(tr("Следить за буфером обмена"))
         self.chk_clip.setChecked(settings.get("clipboard_watch", True))
         form.addRow(self.chk_clip)
@@ -135,11 +151,28 @@ class SettingsDialog(QDialog):
         self.sp_close.setSuffix(tr(" дн. после дедлайна"))
         form2.addRow(tr("Убирать прошедшие"), self.sp_close)
 
-        # --- система ---
-        form.addRow(_section(tr("Система")))
+        # --- вкладка «Оформление»: тема, палитра, язык ---
+        look_page = QWidget()
+        look = QVBoxLayout(look_page)
+        look.setContentsMargins(4, 12, 4, 4)
+        look.setSpacing(8)
+        look.addWidget(_section(tr("Тема")))
+        self.picker = ThemePicker(*self._theme0)
+        self.picker.changed.connect(self._preview_theme)
+        look.addWidget(self.picker)
+        lang_form = QFormLayout()
+        lang_form.setHorizontalSpacing(12)
         self.cb_lang = _combo([(c, tr(lbl) if c == "auto" else lbl) for c, lbl in LANGS],
                               settings.get("lang", "auto"))
-        form.addRow("Язык / Language", self.cb_lang)
+        lang_form.addRow("Язык / Language", self.cb_lang)
+        look.addSpacing(6)
+        look.addLayout(lang_form)
+        look.addStretch(1)
+        tabs.addTab(look_page, tr("Оформление"))
+
+        # --- вкладка «Система» ---
+        sys_page, form = page()
+        tabs.addTab(sys_page, tr("Система"))
         self.chk_lite = QCheckBox(tr("Лёгкий фоновый режим: сторож на C++ (~3 МБ памяти)"))
         self.chk_lite.setChecked(bool(settings.get("watcher_mode", False)))
         self.chk_lite.setEnabled(native_ok)
@@ -152,7 +185,6 @@ class SettingsDialog(QDialog):
         self.chk_auto.setEnabled(autostart.supported())
         self.chk_auto.setChecked(autostart.is_enabled())
         form.addRow(self.chk_auto)
-        root.addLayout(form)
 
         self.err = QLabel("")
         self.err.setObjectName("error")
@@ -200,4 +232,17 @@ class SettingsDialog(QDialog):
         s["watcher_mode"] = self.chk_lite.isChecked()
         self.autostart = self.chk_auto.isChecked()
         self.lang = self.cb_lang.currentData()
+        self.theme = self.picker.mode
+        self.palette = self.picker.palette
         self.accept()
+
+    def _preview_theme(self, mode: str, palette: str) -> None:
+        """Тема видна сразу; «Отмена» вернёт прежнюю."""
+        app = QApplication.instance()
+        if app is not None:
+            theme.apply(app, mode, palette)
+
+    def reject(self) -> None:
+        if (self.picker.mode, self.picker.palette) != self._theme0:
+            self._preview_theme(*self._theme0)
+        super().reject()

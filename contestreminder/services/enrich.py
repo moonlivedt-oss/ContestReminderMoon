@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import html
 import re
+import threading
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal
 
-from .parser import Parsed, has_keyword, parse
+from ..core.parser import Parsed, has_keyword, parse
 
 _MAX_BYTES = 1_500_000
 _TIMEOUT = 8
@@ -110,30 +111,37 @@ def fetch(url: str) -> PageInfo:
     return page_info(doc)
 
 
-class _Signals(QObject):
+class EnrichJob(QObject):
+    """Загрузка страницы в фоновом потоке; результат - сигналом done в главный поток.
+
+    Поток обычный (daemon), а не из пула Qt: на выходе из программы недокачанная
+    страница не держит процесс и не стреляет сигналом в уже разрушенный Qt.
+    Ссылку на задачу держит вызывающий, пока не придёт ответ.
+    """
+
     done = pyqtSignal(object, object)  # (PageInfo | None, ошибка str | None)
-
-
-class EnrichJob(QRunnable):
-    """Загрузка страницы в пуле потоков; результат приходит сигналом в главный поток."""
 
     def __init__(self, url: str) -> None:
         super().__init__()
         self.url = url
-        self.signals = _Signals()
 
-    def run(self) -> None:
+    def start(self) -> None:
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self) -> None:
         try:
-            info = fetch(self.url)
+            info, error = fetch(self.url), None
         except Exception as e:  # noqa: BLE001 - сеть, кодировка, 403: не роняем окно
-            self.signals.done.emit(None, str(e))
-            return
-        self.signals.done.emit(info, None)
+            info, error = None, str(e)
+        try:
+            self.done.emit(info, error)
+        except RuntimeError:  # окно/программа уже закрыты
+            pass
 
 
 def start(url: str, callback) -> EnrichJob:
     """Запускает загрузку; callback(info | None, error | None) - в главном потоке."""
     job = EnrichJob(url)
-    job.signals.done.connect(callback)
-    QThreadPool.globalInstance().start(job)
+    job.done.connect(callback)
+    job.start()
     return job

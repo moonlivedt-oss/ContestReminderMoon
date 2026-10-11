@@ -31,6 +31,9 @@ deadline, offers to save it and reminds you in time.
   (~3 MB of memory) keeps reminding.
 - **Window:** groups by deadline, search, filters, right-click menu, undo for delete,
   calendar export (`.ics`), backup and restore, upcoming deadlines in the tray.
+- **Themes:** Auto / Light / Dark / Sepia and nine palettes (Catppuccin, Tokyo Night,
+  Dracula, Nord, Gruvbox, Rosé Pine, One Dark, Forest, Sunset) picked from landscape cards;
+  urgency stripes and a time bar on every contest card.
 - **Interface languages:** English, Russian, Ukrainian, German (follows Windows by default,
   switches instantly).
 

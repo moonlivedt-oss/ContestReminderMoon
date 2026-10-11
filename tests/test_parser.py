@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from contestreminder.parser import parse
+from contestreminder.core.parser import parse
 
 
 def test_ru_date_with_time_and_url():
