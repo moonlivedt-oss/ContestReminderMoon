@@ -247,3 +247,14 @@ def test_switch_language():
         assert i18n.set_lang("xx") == "ru"
     finally:
         i18n.set_lang("ru")
+
+
+def test_selftest_passes(tmp_path):
+    # отдельный процесс: как запускают exe, и со своим QApplication
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[1]
+    report = tmp_path / "selftest.txt"
+    code = subprocess.call([sys.executable, str(root / "run.pyw"), "--selftest", str(report)],
+                           cwd=root, timeout=120)
+    assert code == 0, report.read_text("utf-8")

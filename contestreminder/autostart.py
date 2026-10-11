@@ -1,6 +1,7 @@
 """Автозапуск вместе с Windows: строка в ``HKCU\\...\\Run`` (без прав администратора).
 
-Включается только явно, галочкой в меню трея. Запуск идёт через ``pythonw`` с
+Включается только явно, в настройках. Из исходников запуск идёт через ``pythonw
+run.pyw``, из собранного ``ContestReminder.exe`` - самим exe; в обоих случаях с
 ключом ``--tray``: при входе в систему окно не всплывает, приложение сразу в трее.
 """
 from __future__ import annotations
@@ -14,11 +15,18 @@ _ENTRY = Path(__file__).resolve().parents[1] / "run.pyw"
 TRAY_FLAG = "--tray"
 
 
+def frozen() -> bool:
+    """Запущены из exe (PyInstaller), а не из исходников."""
+    return bool(getattr(sys, "frozen", False))
+
+
 def supported() -> bool:
-    return sys.platform == "win32" and _ENTRY.exists()
+    return sys.platform == "win32" and (frozen() or _ENTRY.exists())
 
 
 def command() -> str:
+    if frozen():
+        return f'"{Path(sys.executable)}" {TRAY_FLAG}'
     exe = Path(sys.executable)
     windowed = exe.with_name("pythonw.exe")
     if windowed.exists():

@@ -941,7 +941,7 @@ class App:
         )
 
     def save_userscript(self) -> None:
-        src = Path(__file__).resolve().parents[1] / "browser" / "contestreminder.user.js"
+        src = userscript_template()
         try:
             text = src.read_text("utf-8")
         except OSError as e:
@@ -1077,7 +1077,17 @@ class App:
         return self.qapp.exec()
 
 
+def userscript_template() -> Path:
+    """Шаблон userscript: в исходниках - browser/, в exe - та же папка внутри сборки."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    return base / "browser" / "contestreminder.user.js"
+
+
 def main() -> int:
+    from .selftest import FLAG
+    from .selftest import run as selftest
+    if FLAG in sys.argv:
+        return selftest(sys.argv)
     _qapp = QApplication.instance() or QApplication(sys.argv)  # нужен до сокета одной копии
     from .single_instance import InstanceServer, notify_running
 

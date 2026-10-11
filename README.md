@@ -111,8 +111,13 @@ Get-Clipboard | .\tools\cr.ps1
 
 ## Установка и запуск
 
-Нужна Windows 10/11. Скачайте репозиторий (Code -> Download ZIP или `git clone`) и дважды
-щёлкните **`Запуск.bat`**. Он всё настроит сам:
+**Проще всего** - скачать `ContestReminder.exe` со страницы
+[Releases](https://github.com/moonlivedt-oss/ContestReminderMoon/releases/latest) и запустить:
+Python не нужен, рядом лежит `ContestReminder.exe.sha256` для проверки. Файл собирает
+GitHub Actions и перед выкладкой прогоняет самопроверку.
+
+**Из исходников** (Windows 10/11): скачайте репозиторий (Code -> Download ZIP или
+`git clone`) и дважды щёлкните **`Запуск.bat`**. Он всё настроит сам:
 
 1. найдёт Python 3.11 или 3.12 (через `py` или `python` в PATH);
 2. если Python нет - предложит поставить 3.11 через `winget`;
@@ -135,9 +140,14 @@ Python 3.13+ не подходит: под него нет пакета `winsdk`
 ```powershell
 py -3.11 -m pip install -r requirements.txt pytest ruff
 py -3.11 run.pyw            # ключ --tray - стартовать свёрнутым в трей
-py -3.11 -m pytest          # 58 тестов: парсер на 4 языках, дубли, календарь, мост, переводы
+py -3.11 -m pytest          # 59 тестов: парсер на 4 языках, дубли, календарь, мост, переводы
 py -3.11 -m ruff check .
+py -3.11 run.pyw --selftest # самопроверка: OCR, значки, Qt, парсер, переводы
 ```
+
+Свой exe: **`Собрать exe.bat`** (PyInstaller по `ContestReminder.spec`, в конце -
+самопроверка готового файла). Релиз: `gh release create vX.Y.Z` - workflow `release.yml`
+соберёт exe и приложит его к релизу.
 
 ## Требования к системе
 
@@ -171,6 +181,7 @@ browser/contestreminder.user.js   userscript (JavaScript)
 tools/cr.ps1                      отправка из PowerShell
 tests/                            pytest
 Запуск.bat                        установка и запуск двойным кликом
+Собрать exe.bat, ContestReminder.spec   сборка ContestReminder.exe
 ```
 
 ## Лицензия

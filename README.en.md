@@ -33,7 +33,9 @@ deadline, offers to save it and reminds you in time.
 
 ## Install and run
 
-Windows 10/11. Download the repository and double-click **`Запуск.bat`** ("Run"): it finds
+Easiest: download `ContestReminder.exe` from
+[Releases](https://github.com/moonlivedt-oss/ContestReminderMoon/releases/latest) - no Python
+needed. From source (Windows 10/11): download the repository and double-click **`Запуск.bat`** ("Run"): it finds
 Python 3.11 or 3.12 (offers to install it via `winget`), installs the packages from
 `requirements.txt` on first start and launches the app without a console window.
 
