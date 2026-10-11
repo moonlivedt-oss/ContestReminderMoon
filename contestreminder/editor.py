@@ -23,7 +23,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from . import enrich
+from .i18n import tr
 from .models import Contest
+from .parser import Parsed
 
 # Наборы напоминаний, доступные галочками (минуты до дедлайна).
 REMINDER_CHOICES = [
@@ -37,7 +40,7 @@ class ContestDialog(QDialog):
                  default_reminders: list[int] | None = None,
                  hint: str = "", prefill=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Конкурс")
+        self.setWindowTitle(tr("Конкурс"))
         self.setMinimumWidth(440)
         self._result: Contest | None = None
         editing = contest is not None
@@ -57,7 +60,7 @@ class ContestDialog(QDialog):
             banner.setWordWrap(True)
             root.addWidget(banner)
 
-        title = QLabel("Редактировать конкурс" if editing else "Новый конкурс")
+        title = QLabel(tr("Редактировать конкурс") if editing else tr("Новый конкурс"))
         title.setObjectName("h1")
         root.addWidget(title)
 
@@ -66,26 +69,39 @@ class ContestDialog(QDialog):
         grid.setVerticalSpacing(9)
         root.addLayout(grid)
 
-        grid.addWidget(QLabel("Название"), 0, 0)
+        grid.addWidget(QLabel(tr("Название")), 0, 0)
         self.ed_title = QLineEdit(init_title)
-        self.ed_title.setPlaceholderText("Название конкурса")
+        self.ed_title.setPlaceholderText(tr("Название конкурса"))
         grid.addWidget(self.ed_title, 0, 1)
 
-        grid.addWidget(QLabel("Ссылка"), 1, 0)
+        grid.addWidget(QLabel(tr("Ссылка")), 1, 0)
         self.ed_url = QLineEdit(init_url)
         self.ed_url.setPlaceholderText("https://...")
-        grid.addWidget(self.ed_url, 1, 1)
+        url_row = QHBoxLayout()
+        url_row.setSpacing(6)
+        url_row.addWidget(self.ed_url, 1)
+        self.btn_fetch = QPushButton(tr("По ссылке"))
+        self.btn_fetch.setObjectName("ghost")
+        self.btn_fetch.setToolTip(tr("Открыть страницу и взять оттуда название и срок"))
+        self.btn_fetch.clicked.connect(self._fetch)
+        url_row.addWidget(self.btn_fetch)
+        grid.addLayout(url_row, 1, 1)
+        self.fetch_status = QLabel("")
+        self.fetch_status.setObjectName("muted")
+        self.fetch_status.setVisible(False)
+        grid.addWidget(self.fetch_status, 2, 1)
+        self._job = None
 
-        grid.addWidget(QLabel("Дедлайн"), 2, 0, Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(QLabel(tr("Дедлайн")), 3, 0, Qt.AlignmentFlag.AlignTop)
         dl_box = QVBoxLayout()
         dl_box.setSpacing(6)
-        self.chk_has_deadline = QCheckBox("Есть срок окончания")
+        self.chk_has_deadline = QCheckBox(tr("Есть срок окончания"))
         dl_box.addWidget(self.chk_has_deadline)
         self.ed_deadline = QDateTimeEdit()
         self.ed_deadline.setCalendarPopup(True)
         self.ed_deadline.setDisplayFormat("dd.MM.yyyy  HH:mm")
         dl_box.addWidget(self.ed_deadline)
-        grid.addLayout(dl_box, 2, 1)
+        grid.addLayout(dl_box, 3, 1)
 
         dt = contest.deadline_dt if editing else (prefill.deadline if prefill else None)
         has_deadline = dt is not None
@@ -98,7 +114,7 @@ class ContestDialog(QDialog):
         self.ed_deadline.setEnabled(self.chk_has_deadline.isChecked())
 
         # напоминания
-        grid.addWidget(QLabel("Напоминать"), 3, 0, Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(QLabel(tr("Напоминать")), 4, 0, Qt.AlignmentFlag.AlignTop)
         rem_wrap = QWidget()
         rem_grid = QGridLayout(rem_wrap)
         rem_grid.setContentsMargins(0, 0, 0, 0)
@@ -107,26 +123,26 @@ class ContestDialog(QDialog):
         preset = set(contest.reminders if editing else (default_reminders or [1440, 60, 0]))
         self.rem_checks: list[tuple[int, QCheckBox]] = []
         for i, (minutes, label) in enumerate(REMINDER_CHOICES):
-            cb = QCheckBox(label)
+            cb = QCheckBox(tr(label))
             cb.setChecked(minutes in preset)
             rem_grid.addWidget(cb, i // 2, i % 2)
             self.rem_checks.append((minutes, cb))
-        grid.addWidget(rem_wrap, 3, 1)
+        grid.addWidget(rem_wrap, 4, 1)
 
-        grid.addWidget(QLabel("Исходник"), 4, 0, Qt.AlignmentFlag.AlignTop)
+        grid.addWidget(QLabel(tr("Исходник")), 5, 0, Qt.AlignmentFlag.AlignTop)
         self.ed_source = QPlainTextEdit(contest.source_text if editing else "")
-        self.ed_source.setPlaceholderText("Текст, из которого взята информация (необязательно)")
+        self.ed_source.setPlaceholderText(tr("Текст, из которого взята информация (необязательно)"))
         self.ed_source.setFixedHeight(70)
-        grid.addWidget(self.ed_source, 4, 1)
+        grid.addWidget(self.ed_source, 5, 1)
 
         grid.setColumnStretch(1, 1)
 
         btns = QHBoxLayout()
         btns.addStretch(1)
-        cancel = QPushButton("Отмена")
+        cancel = QPushButton(tr("Отмена"))
         cancel.clicked.connect(self.reject)
         btns.addWidget(cancel)
-        save = QPushButton("Сохранить")
+        save = QPushButton(tr("Сохранить"))
         save.setObjectName("accent")
         save.clicked.connect(self._save)
         save.setDefault(True)
@@ -134,7 +150,7 @@ class ContestDialog(QDialog):
         root.addLayout(btns)
 
     def _save(self) -> None:
-        title = self.ed_title.text().strip() or "(без названия)"
+        title = self.ed_title.text().strip() or tr("(без названия)")
         deadline = None
         if self.chk_has_deadline.isChecked():
             deadline = self.ed_deadline.dateTime().toPyDateTime().replace(
@@ -158,6 +174,41 @@ class ContestDialog(QDialog):
                 reminders=reminders)
         self._result = c
         self.accept()
+
+    def _fetch(self) -> None:
+        url = self.ed_url.text().strip()
+        if not url.lower().startswith(("http://", "https://")):
+            self.fetch_status.setText(tr("Нужна ссылка, начинающаяся с http:// или https://"))
+            self.fetch_status.setVisible(True)
+            return
+        self.btn_fetch.setEnabled(False)
+        self.fetch_status.setText(tr("Читаю страницу…"))
+        self.fetch_status.setVisible(True)
+        self._job = enrich.start(url, self._fetched)
+
+    def _fetched(self, info, error) -> None:
+        self._job = None
+        try:
+            self.btn_fetch.setEnabled(True)
+        except RuntimeError:          # окно уже закрыли
+            return
+        if info is None:
+            self.fetch_status.setText(tr("Не удалось открыть страницу: {e}", e=error))
+            return
+        dl = (self.ed_deadline.dateTime().toPyDateTime()
+              if self.chk_has_deadline.isChecked() else None)
+        base = Parsed(title=self.ed_title.text().strip(), url=self.ed_url.text().strip(), deadline=dl)
+        merged = enrich.merge(base, info)
+        got = []
+        if merged.title and merged.title != base.title:
+            self.ed_title.setText(merged.title)
+            got.append(tr("название"))
+        if merged.deadline and dl is None:
+            self.chk_has_deadline.setChecked(True)
+            self.ed_deadline.setDateTime(QDateTime(merged.deadline))
+            got.append(tr("срок"))
+        self.fetch_status.setText(tr("Со страницы: {what}", what=", ".join(got)) if got
+                                  else tr("На странице нового не нашлось"))
 
     @property
     def contest(self) -> Contest | None:

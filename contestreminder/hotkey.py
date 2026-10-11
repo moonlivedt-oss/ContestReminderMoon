@@ -1,7 +1,7 @@
 """Глобальная горячая клавиша через Win32 RegisterHotKey (ctypes, без зависимостей).
 
 Отдельный поток крутит цикл сообщений; по срабатыванию эмитит Qt-сигнал triggered
-(доставляется в主 поток очередью). Если регистрация не удалась (клавиша занята) —
+(доставляется в главный поток очередью). Если регистрация не удалась (клавиша занята) —
 не падаем, просто hotkey не работает, буфер-режим остаётся.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ _WM_QUIT = 0x0012
 _HOTKEY_ID = 1
 
 
-def _parse(spec: str) -> tuple[int, int] | None:
+def parse_spec(spec: str) -> tuple[int, int] | None:
     """'ctrl+alt+c' -> (fsModifiers, vk). None если не разобрали."""
     parts = [p.strip().lower() for p in spec.split("+") if p.strip()]
     if not parts:
@@ -56,7 +56,7 @@ class HotkeyManager(QObject):
         return self._ok
 
     def start(self) -> None:
-        parsed = _parse(self._spec)
+        parsed = parse_spec(self._spec)
         if parsed is None:
             return
         mods, vk = parsed

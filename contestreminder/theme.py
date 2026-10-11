@@ -3,30 +3,44 @@
 Окно обычное (в трее), тема применяется на всё приложение. Карточки конкурсов —
 QFrame#contestCard, статусные плашки — QLabel с objectName chip*/muted.
 """
+
 from __future__ import annotations
 
+from pathlib import Path
+
 PALETTE = {
-    "bg": "#181825", "surface": "#1e1e2e", "surface2": "#11111b",
-    "border": "#313244", "text": "#cdd6f4", "subtext": "#a6adc8",
-    "accent": "#cba6f7", "accent_text": "#11111b", "accent_hover": "#d9bbff",
-    "success": "#a6e3a1", "warn": "#f9e2af", "error": "#f38ba8",
-    "track": "#45475a", "input_bg": "#232336", "input_text": "#cdd6f4",
+    "bg": "#181825",
+    "surface": "#1e1e2e",
+    "surface2": "#11111b",
+    "border": "#313244",
+    "text": "#cdd6f4",
+    "subtext": "#a6adc8",
+    "accent": "#cba6f7",
+    "accent_text": "#11111b",
+    "accent_hover": "#d9bbff",
+    "success": "#a6e3a1",
+    "warn": "#f9e2af",
+    "error": "#f38ba8",
+    "track": "#45475a",
+    "input_bg": "#232336",
+    "input_text": "#cdd6f4",
 }
 
 
 def _mix(c1: str, c2: str, t: float) -> str:
-    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
-    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    a = [int(c1[i : i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i : i + 2], 16) for i in (1, 3, 5)]
     r, g, bl = (max(0, min(255, round(x + (y - x) * t))) for x, y in zip(a, b, strict=True))
     return f"#{r:02x}{g:02x}{bl:02x}"
 
 
 def _rgba(color: str, a: float) -> str:
-    r, g, b = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+    r, g, b = (int(color[i : i + 2], 16) for i in (1, 3, 5))
     return f"rgba({r}, {g}, {b}, {a})"
 
 
 def build_qss(p: dict = PALETTE) -> str:
+    _ASSET = (Path(__file__).resolve().parent / "assets").as_posix()  # noqa: N806
     hov = _mix(p["surface"], p["text"], 0.06)
     return f"""
 * {{
@@ -70,20 +84,69 @@ QLabel#chipOk {{
 }}
 QLabel#link {{ color: {p["accent"]}; font-size: 11px; }}
 
-QLineEdit, QDateTimeEdit, QPlainTextEdit, QTextEdit {{
+QLineEdit, QDateTimeEdit, QPlainTextEdit, QTextEdit, QComboBox, QSpinBox {{
     background: {p["input_bg"]}; border: 1px solid {p["border"]};
     border-radius: 9px; padding: 7px 9px;
     selection-background-color: {p["accent"]}; selection-color: {p["accent_text"]};
 }}
-QLineEdit:focus, QDateTimeEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{
+QLineEdit:focus, QDateTimeEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
+QComboBox:focus, QSpinBox:focus {{
     border-color: {p["accent"]};
 }}
-QDateTimeEdit::drop-down {{ border: none; width: 18px; }}
-QDateTimeEdit::down-arrow {{
-    width: 0; height: 0; border-left: 4px solid transparent;
-    border-right: 4px solid transparent; border-top: 5px solid {p["subtext"]};
-    margin-right: 6px;
+QDateTimeEdit::drop-down, QComboBox::drop-down {{ border: none; width: 18px; }}
+QDateTimeEdit::down-arrow, QComboBox::down-arrow {{
+    image: url({_ASSET}/arrow-down.png); width: 12px; height: 12px; margin-right: 6px;
 }}
+
+QComboBox QAbstractItemView {{
+    background: {p["surface"]}; border: 1px solid {p["border"]};
+    selection-background-color: {_rgba(p["accent"], 0.25)}; outline: none;
+}}
+QSpinBox::up-button, QSpinBox::down-button,
+QTimeEdit::up-button, QTimeEdit::down-button {{ width: 0; border: none; }}
+QTimeEdit::up-arrow, QTimeEdit::down-arrow {{ image: none; width: 0; height: 0; }}
+QTimeEdit {{
+    background: {p["input_bg"]}; border: 1px solid {p["border"]};
+    border-radius: 9px; padding: 7px 9px;
+}}
+QDateTimeEdit:disabled, QSpinBox:disabled {{ color: {p["track"]}; }}
+
+QLabel#groupHead {{
+    color: {p["subtext"]}; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.6px; padding: 6px 2px 0 2px; text-transform: uppercase;
+}}
+QLabel#section {{
+    color: {p["accent"]}; font-size: 12px; font-weight: 700; padding-top: 6px;
+}}
+QLabel#error {{ color: {p["error"]}; }}
+QLabel#cardTitle[done="true"] {{ color: {p["subtext"]}; text-decoration: line-through; }}
+QFrame#sep {{ color: {p["border"]}; }}
+
+QPushButton#seg {{
+    background: transparent; border: 1px solid {p["border"]}; border-radius: 9px;
+    padding: 6px 11px; color: {p["subtext"]}; font-weight: 600;
+}}
+QPushButton#seg:hover {{ border-color: {_rgba(p["accent"], 0.6)}; color: {p["text"]}; }}
+QPushButton#seg:checked {{
+    background: {_rgba(p["accent"], 0.18)}; border-color: {_rgba(p["accent"], 0.6)};
+    color: {p["accent"]};
+}}
+QPushButton::menu-indicator {{ width: 0; image: none; }}
+
+QFrame#toast {{
+    background: {p["surface"]}; border: 1px solid {p["border"]};
+    border-left: 3px solid {p["accent"]}; border-radius: 12px;
+}}
+QFrame#toast[kind="warn"] {{ border-left-color: {p["warn"]}; }}
+QFrame#toast[kind="ok"] {{ border-left-color: {p["success"]}; }}
+QFrame#toast[kind="offer"] {{ border-left-color: {p["accent"]}; }}
+QLabel#toastTitle {{ font-size: 13px; font-weight: 700; }}
+QLabel#toastBody {{ color: {p["subtext"]}; font-size: 12px; }}
+QPushButton#toastClose {{
+    background: transparent; border: none; padding: 0 4px; color: {p["subtext"]};
+    font-size: 15px; font-weight: 400;
+}}
+QPushButton#toastClose:hover {{ color: {p["error"]}; }}
 
 QScrollArea {{ border: none; background: transparent; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
@@ -116,7 +179,9 @@ QCheckBox::indicator {{
     border: 1px solid {p["border"]}; background: {p["input_bg"]};
 }}
 QCheckBox::indicator:hover {{ border-color: {p["accent"]}; }}
-QCheckBox::indicator:checked {{ background: {p["accent"]}; border-color: {p["accent"]}; }}
+QCheckBox::indicator:checked {{
+    background: {p["accent"]}; border-color: {p["accent"]}; image: url({_ASSET}/check.png);
+}}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {p["track"]}; border-radius: 4px; min-height: 28px; }}

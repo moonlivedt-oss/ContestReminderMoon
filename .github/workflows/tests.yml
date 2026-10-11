@@ -30,3 +30,11 @@ jobs:
         run: ruff check .
       - name: Pytest
         run: pytest -q
+      - name: JavaScript (userscript) syntax
+        run: node --check browser/contestreminder.user.js
+      - name: PowerShell (cr.ps1) syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/tools/cr.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }

@@ -1,6 +1,6 @@
 [project]
 name = "contestreminder"
-version = "1.1.0"
+version = "1.2.0"
 description = "Трей-напоминалка о конкурсах: автозапись из буфера обмена и OCR экрана, напоминания по дедлайнам"
 readme = "README.md"
 license = { text = "MIT" }
