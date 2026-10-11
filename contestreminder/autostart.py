@@ -47,15 +47,31 @@ def is_enabled() -> bool:
         return False
 
 
-def set_enabled(on: bool) -> None:
-    """Включает/выключает автозапуск. OSError - пусть покажет вызывающий."""
+def current() -> str:
+    """Что сейчас записано в автозапуск ("" - ничего)."""
+    if sys.platform != "win32":
+        return ""
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _RUN_KEY) as key:
+            return str(winreg.QueryValueEx(key, _VALUE)[0])
+    except OSError:
+        return ""
+
+
+def set_enabled(on: bool, cmd: str | None = None) -> None:
+    """Включает/выключает автозапуск. cmd - своя команда (сторож crnative.exe watch).
+
+    OSError - пусть покажет вызывающий.
+    """
     import winreg
 
     with winreg.OpenKey(
         winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
     ) as key:
         if on:
-            winreg.SetValueEx(key, _VALUE, 0, winreg.REG_SZ, command())
+            winreg.SetValueEx(key, _VALUE, 0, winreg.REG_SZ, cmd or command())
         else:
             try:
                 winreg.DeleteValue(key, _VALUE)

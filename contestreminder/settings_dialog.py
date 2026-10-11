@@ -31,8 +31,10 @@ CAPTURE_MODES = [
     ("dialog", "Открывать окно редактирования"),
 ]
 NOTIFY_STYLES = [
-    ("toast", "Карточка с кнопками"),
-    ("tray", "Уведомление Windows"),
+    ("auto", "Как лучше (уведомления Windows, если есть C++-часть)"),
+    ("windows", "Уведомления Windows с кнопками"),
+    ("toast", "Карточки программы"),
+    ("tray", "Простые уведомления трея"),
 ]
 OCR_LANGS = [("ru", "Русский"), ("en-US", "Английский"), ("", "Как в системе")]
 
@@ -53,7 +55,7 @@ def _combo(items: list[tuple[str, str]], value: str) -> QComboBox:
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, parent, settings: dict) -> None:
+    def __init__(self, parent, settings: dict, native_ok: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Настройки"))
         self.setMinimumWidth(500)
@@ -100,7 +102,7 @@ class SettingsDialog(QDialog):
             self.rem_checks.append((minutes, cb))
         form2 = form
         form2.addRow(tr("Для новых конкурсов"), rem)
-        self.cb_style = _combo(NOTIFY_STYLES, settings.get("notify_style", "toast"))
+        self.cb_style = _combo(NOTIFY_STYLES, settings.get("notify_style", "auto"))
         form2.addRow(tr("Как показывать"), self.cb_style)
         self.chk_sound = QCheckBox(tr("Звук"))
         self.chk_sound.setChecked(settings.get("sound", True))
@@ -138,6 +140,14 @@ class SettingsDialog(QDialog):
         self.cb_lang = _combo([(c, tr(lbl) if c == "auto" else lbl) for c, lbl in LANGS],
                               settings.get("lang", "auto"))
         form.addRow("Язык / Language", self.cb_lang)
+        self.chk_lite = QCheckBox(tr("Лёгкий фоновый режим: сторож на C++ (~3 МБ памяти)"))
+        self.chk_lite.setChecked(bool(settings.get("watcher_mode", False)))
+        self.chk_lite.setEnabled(native_ok)
+        if native_ok:
+            self.chk_lite.setToolTip(tr("Закрытие окна выключает программу целиком, а напоминания показывает маленький сторож. Окно откроется по клику на уведомление."))
+        if not native_ok:
+            self.chk_lite.setToolTip(tr("Нужна C++-часть crnative.exe: она есть в ContestReminder.exe из релизов"))
+        form.addRow(self.chk_lite)
         self.chk_auto = QCheckBox(tr("Запускать вместе с Windows (сразу в трей)"))
         self.chk_auto.setEnabled(autostart.supported())
         self.chk_auto.setChecked(autostart.is_enabled())
@@ -187,6 +197,7 @@ class SettingsDialog(QDialog):
         )
         s["digest_days"] = self.sp_days.value()
         s["auto_close_days"] = self.sp_close.value()
+        s["watcher_mode"] = self.chk_lite.isChecked()
         self.autostart = self.chk_auto.isChecked()
         self.lang = self.cb_lang.currentData()
         self.accept()

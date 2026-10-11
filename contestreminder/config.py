@@ -24,7 +24,8 @@ DEFAULT_SETTINGS = {
     "enrich": True,  # уточнять название и срок по ссылке
     "hotkey": "ctrl+alt+c",  # горячая клавиша OCR-захвата
     "ocr_lang": "ru",  # язык OCR (ru, en-US или "" - как в системе)
-    "notify_style": "toast",  # toast - карточка с кнопками, tray - уведомление Windows
+    "notify_style": "auto",  # auto/windows - уведомления Windows (C++), toast - карточки, tray - трей
+    "watcher_mode": False,  # лёгкий режим: вместо программы в трее - сторож crnative.exe
     "sound": True,  # звук при напоминании
     "digest_time": "10:00",  # сводка дня; "" - выключена
     "digest_days": 3,  # сводка: дедлайны на сколько дней вперёд

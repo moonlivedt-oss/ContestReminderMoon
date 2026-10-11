@@ -11,3 +11,7 @@ dist/
 *.backup-*/
 *.bak
 *.log
+
+# C++: результат сборки native/build.cmd
+native/bin/
+native/obj/

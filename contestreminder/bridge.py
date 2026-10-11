@@ -44,6 +44,7 @@ class Bridge(QObject):
     """Сервер в фоновом потоке; присланное приходит сигналом received в главный поток."""
 
     received = pyqtSignal(str, str, str)  # text, url, title
+    action = pyqtSignal(str, str, str)  # done | snooze | open, id конкурса, минуты/"tomorrow"
 
     def __init__(self, token: str, port: int = DEFAULT_PORT) -> None:
         super().__init__()
@@ -110,7 +111,8 @@ class Bridge(QObject):
             def do_POST(self) -> None:  # noqa: N802
                 if not self._host_ok():
                     return self._send(403, '{"error": "host"}')
-                if urlsplit(self.path).path != "/add":
+                path = urlsplit(self.path).path
+                if path not in ("/add", "/action"):
                     return self._send(404, '{"error": "not found"}')
                 size = int(self.headers.get("Content-Length") or 0)
                 if size > MAX_BODY:
@@ -121,6 +123,14 @@ class Bridge(QObject):
                 except json.JSONDecodeError:
                     data = {"text": raw}
                 token = self.headers.get("X-Token") or str(data.get("token", ""))
+                if path == "/action":   # кнопка уведомления Windows (crnative.exe)
+                    act = str(data.get("action", ""))
+                    if not hmac.compare_digest(token or "", bridge.token):
+                        return self._send(403, '{"ok": false}')
+                    if act not in ("done", "snooze", "open"):
+                        return self._send(400, '{"ok": false}')
+                    bridge.action.emit(act, str(data.get("id", ""))[:64], str(data.get("min", ""))[:12])
+                    return self._send(200, '{"ok": true}')
                 code = self._accept(
                     token,
                     str(data.get("text", "")),

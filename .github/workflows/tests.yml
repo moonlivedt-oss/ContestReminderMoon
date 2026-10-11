@@ -30,6 +30,15 @@ jobs:
         run: ruff check .
       - name: Pytest
         run: pytest -q
+      - name: C++ (crnative.exe) build and self-test
+        if: matrix.python-version == '3.11'
+        shell: cmd
+        run: |
+          call native\build.cmd || exit /b 1
+          native\bin\crnative.exe selftest "%RUNNER_TEMP%\native.txt"
+          set CODE=%errorlevel%
+          type "%RUNNER_TEMP%\native.txt"
+          exit /b %CODE%
       - name: JavaScript (userscript) syntax
         run: node --check browser/contestreminder.user.js
       - name: PowerShell (cr.ps1) syntax

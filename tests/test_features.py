@@ -258,3 +258,33 @@ def test_selftest_passes(tmp_path):
     code = subprocess.call([sys.executable, str(root / "run.pyw"), "--selftest", str(report)],
                            cwd=root, timeout=120)
     assert code == 0, report.read_text("utf-8")
+
+
+def test_bridge_action_from_windows_notification(port=47698):
+    got = []
+    br = Bridge("secret", port)
+    br.action.connect(lambda *a: got.append(a))
+    assert br.start()
+    try:
+        def post(payload):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/action", method="POST",
+                                         data=json.dumps(payload).encode())
+            return urllib.request.urlopen(req).status
+        assert post({"token": "secret", "action": "snooze", "id": "abc", "min": "60"}) == 200
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post({"token": "bad", "action": "done", "id": "abc"})
+        assert e.value.code == 403
+        with pytest.raises(urllib.error.HTTPError) as e:
+            post({"token": "secret", "action": "rm -rf", "id": "abc"})
+        assert e.value.code == 400
+        for _ in range(20):
+            app.processEvents()
+        assert got == [("snooze", "abc", "60")]
+    finally:
+        br.stop()
+
+
+def test_native_paths_and_command():
+    from contestreminder import native
+    assert native.app_command().endswith('run.pyw"')
+    assert native.watcher_command(Path("C:/x/crnative.exe")).endswith('" watch')

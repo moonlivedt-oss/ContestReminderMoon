@@ -8,6 +8,7 @@
 ![PyQt6](https://img.shields.io/badge/PyQt6-41CD52?logo=qt&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-userscript-F7DF1E?logo=javascript&logoColor=black)
 ![PowerShell](https://img.shields.io/badge/PowerShell-cr.ps1-5391FE?logo=powershell&logoColor=white)
+![C++](https://img.shields.io/badge/C%2B%2B20-C%2B%2B%2FWinRT-00599C?logo=cplusplus&logoColor=white)
 ![Языки](https://img.shields.io/badge/интерфейс-RU%20%7C%20EN%20%7C%20UK%20%7C%20DE-cba6f7)
 [![License: MIT](https://img.shields.io/badge/License-MIT-cba6f7)](LICENSE)
 
@@ -61,9 +62,11 @@
 ![Карточки напоминаний](docs/toasts.png)
 
 - У каждого конкурса свой набор порогов: за 3 дня / 1 день / 6 ч / 1 час / 15 мин / в момент.
-- Напоминание - карточка с кнопками **Открыть** (ссылку), **Отложить** (на 15 мин, 1 ч,
-  3 ч, до завтра 9:00) и **Готово**, со звуком. Можно переключить на обычные уведомления
-  Windows.
+- Напоминание - **уведомление Windows** с кнопками **Открыть** (ссылку), **Через 1 ч**,
+  **Завтра** и **Готово**. Оно остаётся в Центре уведомлений, если вы отошли, а срочные висят на
+  экране, пока не нажмёте. Кнопки работают, даже когда программа закрыта.
+  Без C++-части (запуск из исходников без MSVC) - карточка программы с кнопками **Открыть**,
+  **Отложить** (15 мин, 1 ч, 3 ч, до завтра 9:00) и **Готово**, со звуком.
 - Программа была выключена и пропустила несколько порогов - придёт одно напоминание, самое
   срочное, а не пачка.
 - **Сводка дня** в заданное время: что заканчивается в ближайшие дни.
@@ -89,6 +92,32 @@
 сразу, без перезапуска: меню «…» -> «Язык» или в настройках.
 
 ![Окно на английском](docs/screenshot-en.png)
+
+## C++: уведомления Windows и лёгкий сторож
+
+`native/crnative.cpp` - нативная часть на C++20 и C++/WinRT (около 400 КБ, без сторонних
+библиотек). Она входит в `ContestReminder.exe` и ставится в `%LOCALAPPDATA%\ContestReminder\bin`.
+
+- **Уведомления Windows.** Программа отдаёт напоминание crnative, тот показывает его через
+  Центр уведомлений. Кнопки - адреса `contestreminder://snooze?id=...`: Windows запускает по ним
+  crnative, а он передаёт действие программе через мост или, если она закрыта, сам правит
+  `contests.json` (под общим мьютексом, атомарной записью).
+- **Лёгкий фоновый режим** (настройки -> Система). Обычно программа живёт в трее целиком
+  (Python и Qt). В лёгком режиме закрытие окна выключает её, а напоминает сторож
+  `crnative watch`: около 3 МБ личной памяти и 0,2 МБ рабочего набора в покое. Он спит до
+  ближайшего порога, просыпается при изменении `contests.json` и молчит, пока запущена
+  основная программа. Окно открывается кликом по уведомлению. Автозапуск с Windows в этом
+  режиме запускает сторожа, а не программу.
+
+Сборка из исходников (нужны Visual Studio или Build Tools с компонентом C++ и Windows SDK):
+
+```bat
+native\build.cmd                         :: -> native\bin\crnative.exe
+native\bin\crnative.exe selftest out.txt :: самопроверка: даты, JSON, пороги, XML уведомления
+```
+
+Нет MSVC - программа работает и без C++-части: карточки вместо уведомлений Windows, без
+сторожа.
 
 ## Браузер и PowerShell
 
@@ -140,13 +169,13 @@ Python 3.13+ не подходит: под него нет пакета `winsdk`
 ```powershell
 py -3.11 -m pip install -r requirements.txt pytest ruff
 py -3.11 run.pyw            # ключ --tray - стартовать свёрнутым в трей
-py -3.11 -m pytest          # 59 тестов: парсер на 4 языках, дубли, календарь, мост, переводы
+py -3.11 -m pytest          # 61 тест: парсер на 4 языках, дубли, календарь, мост, переводы
 py -3.11 -m ruff check .
 py -3.11 run.pyw --selftest # самопроверка: OCR, значки, Qt, парсер, переводы
 ```
 
-Свой exe: **`Собрать exe.bat`** (PyInstaller по `ContestReminder.spec`, в конце -
-самопроверка готового файла). Релиз: `gh release create vX.Y.Z` - workflow `release.yml`
+Свой exe: **`Собрать exe.bat`** (C++-часть через `native\build.cmd`, затем PyInstaller по
+`ContestReminder.spec`, в конце - самопроверка готового файла). Релиз: `gh release create vX.Y.Z` - workflow `release.yml`
 соберёт exe и приложит его к релизу.
 
 ## Требования к системе
@@ -176,9 +205,12 @@ contestreminder/
   clipboard_watch.py, hotkey.py, region.py, ocr.py   буфер, клавиша, выбор области, Windows OCR
   single_instance.py одна копия программы
   autostart.py       автозапуск с Windows
+  native.py          связь с crnative.exe: установка, уведомления, сторож
+  selftest.py        самопроверка сборки (--selftest)
   theme.py, icons.py, assets/   оформление и значки
 browser/contestreminder.user.js   userscript (JavaScript)
 tools/cr.ps1                      отправка из PowerShell
+native/crnative.cpp, build.cmd    C++: уведомления Windows и сторож
 tests/                            pytest
 Запуск.bat                        установка и запуск двойным кликом
 Собрать exe.bat, ContestReminder.spec   сборка ContestReminder.exe

@@ -68,6 +68,21 @@ def _checks() -> list[tuple[str, object]]:
         p = parse("Конкурс до 15 ноября 2030 в 18:00 https://example.com")
         assert p.deadline and p.deadline.hour == 18 and p.url
 
+    def native_part() -> None:
+        import subprocess
+        import tempfile
+
+        from .native import bundled_dir
+        exe = bundled_dir() / "crnative.exe"
+        if not exe.exists():
+            # в exe из релиза C++-часть обязательна; из исходников без MSVC - нет
+            assert not getattr(sys, "frozen", False), "crnative.exe не вошёл в сборку"
+            return
+        with tempfile.TemporaryDirectory() as tmp:
+            report = Path(tmp) / "native.txt"
+            code = subprocess.call([str(exe), "selftest", str(report)], timeout=30)
+            assert code == 0, report.read_text("utf-8") if report.exists() else f"код {code}"
+
     def translations() -> None:
         from .i18n import set_lang, tr
 
@@ -80,6 +95,7 @@ def _checks() -> list[tuple[str, object]]:
         ("захват экрана (mss)", screen_capture),
         ("значки", assets),
         ("шаблон userscript", userscript),
+        ("C++-часть (crnative.exe)", native_part),
         ("Qt и оформление", qt),
         ("парсер", parser),
         ("переводы", translations),

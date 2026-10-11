@@ -1,9 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
 # Сборка одного ContestReminder.exe (без консоли): pyinstaller ContestReminder.spec
 # Внутрь кладутся значки и шаблон userscript - код ищет их рядом с модулями.
 # Python 3.11/3.12: под них есть winsdk (Windows OCR).
 
 block_cipher = None
+
+# C++-часть (уведомления Windows и сторож): native\build.cmd кладёт её в native/bin.
+# Нет сборки - exe получится без неё, программа просто обойдётся карточками.
+NATIVE = [(f"native/bin/{name}", "native") for name in ("crnative.exe", "icon.png")
+          if os.path.exists(f"native/bin/{name}")]
 
 # winsdk грузит модули WinRT лениво (import внутри функции) - PyInstaller их не видит
 hidden = [
@@ -24,7 +31,7 @@ a = Analysis(
     datas=[
         ("contestreminder/assets", "contestreminder/assets"),
         ("browser/contestreminder.user.js", "browser"),
-    ],
+    ] + NATIVE,
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],

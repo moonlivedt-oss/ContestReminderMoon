@@ -34,13 +34,13 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from . import __version__, autostart, config, enrich
+from . import __version__, autostart, config, enrich, native
 from .bridge import DEFAULT_PORT, Bridge, bookmarklet, new_token
 from .clipboard_watch import ClipboardWatcher
 from .dedupe import find_duplicate
 from .editor import ContestDialog
 from .hotkey import HotkeyManager
-from .i18n import LANGS, set_lang, tr
+from .i18n import LANGS, lang, set_lang, tr
 from .icons import app_icon, asset_icon
 from .ics import build_ics
 from .models import Contest, fmt_countdown, fmt_deadline, fmt_offset
@@ -230,7 +230,19 @@ class App:
             self.settings["bridge_token"], int(self.settings.get("bridge_port", DEFAULT_PORT))
         )
         self.bridge.received.connect(self._on_bridge)
+        self.bridge.action.connect(self._on_toast_action)
         self.bridge.start()
+
+        # нативная часть (C++): уведомления Windows и лёгкий сторож; нет её - без них
+        self.app_mutex = native.AppMutex()
+        self.native = None
+        try:
+            self.native = native.install()
+            if self.native is not None:
+                native.register(self.native)
+        except Exception:  # noqa: BLE001 - нативная часть необязательна
+            self.native = None
+        self._sync_autostart()
 
         self.scheduler = ReminderScheduler(
             lambda: self.contests,
@@ -544,6 +556,7 @@ class App:
         )
 
     def toggle_done(self, contest: Contest) -> None:
+        self._remove_native(contest)
         contest.done = not contest.done
         contest.auto_closed = False
         if contest.done:
@@ -551,6 +564,7 @@ class App:
         self._changed()
 
     def snooze(self, c: Contest, minutes: int) -> None:
+        self._remove_native(c)
         c.snoozed_until = (
             (datetime.now() + timedelta(minutes=minutes))
             .replace(second=0, microsecond=0)
@@ -824,9 +838,15 @@ class App:
                 + " | "
                 + fmt_deadline(contest.deadline_dt)
             )
-        if self.settings.get("sound", True):
-            _beep()
-        if self.settings.get("notify_style", "toast") == "tray":
+        if self.settings.get("sound", True) and self._notify_style() != "windows":
+            _beep()   # у уведомления Windows свой звук
+        style = self._notify_style()
+        if style == "windows" and native.toast(
+            self.native, contest.id, head, body, contest.url, lang(),
+            urgent=offset in (0, SNOOZED) or expired,
+        ):
+            return
+        if style == "tray":
             self.tray.showMessage(
                 head, body + (f"\n{contest.url}" if contest.url else ""), app_icon(), 12000
             )
@@ -972,16 +992,16 @@ class App:
     def open_settings(self) -> None:
         self.show_window()
         old_hotkey = self.settings.get("hotkey")
-        dlg = SettingsDialog(self.win, self.settings)
+        dlg = SettingsDialog(self.win, self.settings, native_ok=bool(self.native))
         if not dlg.exec():
             return
         config.save_settings(self.settings)
         self.clipboard.set_enabled(self.settings.get("clipboard_watch", True))
         if self.settings.get("hotkey") != old_hotkey:
             self._start_hotkey()
-        if autostart.supported() and dlg.autostart != autostart.is_enabled():
+        if autostart.supported():
             try:
-                autostart.set_enabled(dlg.autostart)
+                self._sync_autostart(dlg.autostart)
             except OSError as e:
                 QMessageBox.warning(
                     self.win, tr("Автозапуск"), tr("Не удалось изменить автозапуск:\n{e}", e=e)
@@ -1053,6 +1073,11 @@ class App:
         self.settings["geometry"] = base64.b64encode(bytes(self.win.saveGeometry())).decode("ascii")
         config.save_settings(self.settings)
         event.ignore()
+        if self._lite():
+            # лёгкий режим: программа выходит целиком, напоминает сторож (~2 МБ)
+            self.win.hide()
+            self.quit()
+            return
         self.win.hide()
         if not self.settings.get("tray_hint_shown"):
             self.settings["tray_hint_shown"] = True
@@ -1071,7 +1096,61 @@ class App:
         self._save()
         config.save_settings(self.settings)
         self.tray.hide()
+        if self._lite():
+            self.app_mutex.release()           # сторож видит, что программа закрылась
+            native.start_watcher(self.native)
         self.qapp.quit()
+
+    # --- нативная часть -------------------------------------------------
+    def _lite(self) -> bool:
+        """Лёгкий фоновый режим: вместо программы в трее работает сторож на C++."""
+        return bool(self.native) and bool(self.settings.get("watcher_mode", False))
+
+    def _notify_style(self) -> str:
+        style = self.settings.get("notify_style", "auto")
+        if style == "auto":
+            style = "windows" if self.native else "toast"
+        if style == "windows" and not self.native:
+            style = "toast"
+        return style
+
+    def _remove_native(self, c: Contest) -> None:
+        if self.native:
+            native.remove(self.native, c.id)
+
+    def _sync_autostart(self, on: bool | None = None) -> None:
+        """Автозапуск указывает на сторож в лёгком режиме и на программу - в обычном."""
+        if not autostart.supported():
+            return
+        if on is None:
+            on = autostart.is_enabled()
+        cmd = native.watcher_command(self.native) if self._lite() else autostart.command()
+        if not on:
+            if autostart.is_enabled():
+                autostart.set_enabled(False)
+        elif autostart.current() != cmd:
+            autostart.set_enabled(True, cmd)
+
+    def _on_toast_action(self, action: str, cid: str, minutes: str) -> None:
+        """Кнопка уведомления Windows, нажатая, пока программа запущена."""
+        if action == "open" or not cid:
+            self.show_window()
+            return
+        c = next((x for x in self.contests if x.id == cid), None)
+        if c is None:
+            return
+        if action == "done":
+            if not c.done:
+                self.toggle_done(c)
+        elif action == "snooze":
+            if minutes == "tomorrow":
+                mins = self._snooze_choices()[-1][1]
+            else:
+                try:
+                    mins = max(1, int(minutes))
+                except ValueError:
+                    mins = 60
+            self.snooze(c, mins)
 
     def run(self) -> int:
         return self.qapp.exec()

@@ -256,6 +256,30 @@ _ROWS = [
     ("за 6 ч", "6 h before", "за 6 год", "6 Std. vorher"),
     ("за 1 час", "1 hour before", "за 1 годину", "1 Stunde vorher"),
     ("за 15 мин", "15 min before", "за 15 хв", "15 Min. vorher"),
+    # нативная часть (C++)
+    ("Как лучше (уведомления Windows, если есть C++-часть)",
+     "Best available (Windows notifications if the C++ part is present)",
+     "Як краще (сповіщення Windows, якщо є C++-частина)",
+     "Automatisch (Windows-Benachrichtigungen, wenn der C++-Teil vorhanden ist)"),
+    ("Уведомления Windows с кнопками", "Windows notifications with buttons",
+     "Сповіщення Windows з кнопками", "Windows-Benachrichtigungen mit Schaltflächen"),
+    ("Карточки программы", "App cards", "Картки програми", "Karten der App"),
+    ("Простые уведомления трея", "Simple tray notifications", "Прості сповіщення трею",
+     "Einfache Infobereich-Meldungen"),
+    ("Лёгкий фоновый режим: сторож на C++ (~3 МБ памяти)", "Lightweight background mode: C++ watcher (~3 MB of memory)",
+     "Легкий фоновий режим: сторож на C++ (~3 МБ пам'яті)",
+     "Leichter Hintergrundmodus: C++-Wächter (~3 MB Speicher)"),
+    ("Закрытие окна выключает программу целиком, а напоминания показывает маленький сторож. Окно откроется по клику на уведомление.",
+     "Closing the window quits the whole app, and a small watcher shows the reminders. "
+     "Clicking a notification opens the window.",
+     "Закриття вікна вимикає програму повністю, а нагадування показує маленький сторож. "
+     "Вікно відкриється по кліку на сповіщення.",
+     "Das Schließen des Fensters beendet die App, die Erinnerungen zeigt ein kleiner Wächter. "
+     "Ein Klick auf eine Benachrichtigung öffnet das Fenster."),
+    ("Нужна C++-часть crnative.exe: она есть в ContestReminder.exe из релизов",
+     "Needs the C++ part crnative.exe: it is included in ContestReminder.exe from the releases",
+     "Потрібна C++-частина crnative.exe: вона є в ContestReminder.exe з релізів",
+     "Benötigt den C++-Teil crnative.exe: er ist in ContestReminder.exe aus den Releases enthalten"),
     # страница моста в браузере
     ("Отправлено, проверьте карточку в углу экрана.", "Sent - check the card in the corner of the screen.",
      "Надіслано, перевірте картку в куті екрана.", "Gesendet - siehe Karte in der Bildschirmecke."),

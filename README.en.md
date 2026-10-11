@@ -24,8 +24,11 @@ deadline, offers to save it and reminds you in time.
   deadline for a saved contest is offered as an update.
 - **Reads the linked page** in the background when the post has no deadline or a vague title
   (Telegram posts work without login).
-- **Actionable reminders:** cards with Open, Snooze (15 min, 1 h, 3 h, tomorrow 9:00) and
-  Done, with sound; a daily summary; past contests are closed automatically.
+- **Windows notifications** with Open, In 1 h, Tomorrow and Done buttons, made by a small C++/WinRT
+  helper (`native/crnative.cpp`); the buttons work even when the app is closed. Without the
+  C++ part - in-app cards with Snooze. Daily summary; past contests are closed automatically.
+- **Lightweight background mode:** closing the window quits the app and a C++ watcher
+  (~3 MB of memory) keeps reminding.
 - **Window:** groups by deadline, search, filters, right-click menu, undo for delete,
   calendar export (`.ics`), backup and restore, upcoming deadlines in the tray.
 - **Interface languages:** English, Russian, Ukrainian, German (follows Windows by default,

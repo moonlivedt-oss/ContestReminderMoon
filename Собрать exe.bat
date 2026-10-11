@@ -16,6 +16,9 @@ if not defined PY (
     pause
     exit /b 1
 )
+echo === C++: уведомления Windows и сторож ===
+call native\build.cmd
+if errorlevel 1 echo Без C++-части: exe соберётся, но без уведомлений Windows и сторожа.
 echo === Пакеты и PyInstaller ===
 %PY% -m pip install --disable-pip-version-check -r requirements.txt pyinstaller || goto :fail
 echo === Сборка ===
