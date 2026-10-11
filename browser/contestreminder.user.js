@@ -2,7 +2,7 @@
 // @name         ContestReminder: отправить конкурс
 // @name:en      ContestReminder: send contest
 // @namespace    https://github.com/moonlivedt-oss/ContestReminderMoon
-// @version      1.3.0
+// @version      1.4.0
 // @description  Выделенный пост о конкурсе (или сама страница) уходит в ContestReminder на этом компьютере
 // @description:en Sends the selected contest post (or the page itself) to ContestReminder on this computer
 // @match        *://*/*
